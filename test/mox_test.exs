@@ -4,11 +4,6 @@ defmodule MoxTest do
   import Mox
   doctest Mox
 
-  defmodule Calculator do
-    @callback add(integer(), integer()) :: integer()
-    @callback mult(integer(), integer()) :: integer()
-  end
-
   defmodule ScientificCalculator do
     @callback exponent(integer(), integer()) :: integer()
   end
@@ -116,8 +111,8 @@ defmodule MoxTest do
           set_mox_global()
 
           CalcMock
-          |> expect(:add, fn _, _ -> :expected end)
-          |> stub(:mult, fn _, _ -> :stubbed end)
+          |> expect(:add, fn _, _ -> 1 end)
+          |> stub(:mult, fn _, _ -> 2 end)
         end)
 
       Task.await(task)
@@ -185,7 +180,7 @@ defmodule MoxTest do
 
         assert_raise ArgumentError, msg, fn ->
           CalcMock
-          |> expect(:add, fn _, _ -> :expected end)
+          |> expect(:add, fn _, _ -> 1 end)
         end
       end)
       |> Task.await()
@@ -301,6 +296,15 @@ defmodule MoxTest do
       assert CalcMock.add(2, 3) == 5
     end
 
+    test "verifies that the mocks return the correct type" do
+      set_mox_private()
+
+      expect(CalcMock, :add, fn _, _ -> :some_atom end)
+      assert_raise(RuntimeError, ":some_atom is not of type :integer", fn ->
+        CalcMock.add(2, 3) == 5
+      end)
+    end
+
     test "verifies all mocks for the current process on exit with previous verification in private mode" do
       set_mox_private()
 
@@ -362,9 +366,9 @@ defmodule MoxTest do
       in_all_modes(fn ->
         CalcMock
         |> stub(:add, fn x, y -> x + y end)
-        |> expect(:add, fn _, _ -> :expected end)
+        |> expect(:add, fn _, _ -> 1 end)
 
-        assert CalcMock.add(1, 1) == :expected
+        assert CalcMock.add(1, 1) == 1
         verify!()
       end)
     end
@@ -372,12 +376,12 @@ defmodule MoxTest do
     test "invokes stub after expectations are fulfilled" do
       in_all_modes(fn ->
         CalcMock
-        |> stub(:add, fn _x, _y -> :stub end)
-        |> expect(:add, 2, fn _, _ -> :expected end)
+        |> stub(:add, fn _x, _y -> 2 end)
+        |> expect(:add, 2, fn _, _ -> 1 end)
 
-        assert CalcMock.add(1, 1) == :expected
-        assert CalcMock.add(1, 1) == :expected
-        assert CalcMock.add(1, 1) == :stub
+        assert CalcMock.add(1, 1) == 1
+        assert CalcMock.add(1, 1) == 1
+        assert CalcMock.add(1, 1) == 2
         verify!()
       end)
     end
@@ -506,23 +510,23 @@ defmodule MoxTest do
         end)
 
       CalcMock
-      |> expect(:add, fn _, _ -> :expected end)
-      |> stub(:mult, fn _, _ -> :stubbed end)
+      |> expect(:add, fn _, _ -> 1 end)
+      |> stub(:mult, fn _, _ -> 2 end)
       |> allow(self(), child_pid)
 
       send(child_pid, :call_mock)
 
       assert_receive {:verify, add_result, mult_result}
-      assert add_result == :expected
-      assert mult_result == :stubbed
+      assert add_result == 1
+      assert mult_result == 2
     end
 
     test "allows different processes to share mocks from child process" do
       parent_pid = self()
 
       CalcMock
-      |> expect(:add, fn _, _ -> :expected end)
-      |> stub(:mult, fn _, _ -> :stubbed end)
+      |> expect(:add, fn _, _ -> 1 end)
+      |> stub(:mult, fn _, _ -> 2 end)
 
       Task.async(fn ->
         assert_raise Mox.UnexpectedCallError, fn -> CalcMock.add(1, 1) end
@@ -530,8 +534,8 @@ defmodule MoxTest do
         CalcMock
         |> allow(parent_pid, self())
 
-        assert CalcMock.add(1, 1) == :expected
-        assert CalcMock.mult(1, 1) == :stubbed
+        assert CalcMock.add(1, 1) == 1
+        assert CalcMock.mult(1, 1) == 2
       end)
       |> Task.await()
     end
@@ -563,16 +567,16 @@ defmodule MoxTest do
         end)
 
       CalcMock
-      |> expect(:add, fn _, _ -> :expected end)
-      |> stub(:mult, fn _, _ -> :stubbed end)
+      |> expect(:add, fn _, _ -> 1 end)
+      |> stub(:mult, fn _, _ -> 2 end)
       |> allow(self(), transitive_pid)
 
       send(transitive_pid, :allow_mock)
 
       receive do
         {:verify, add_result, mult_result} ->
-          assert add_result == :expected
-          assert mult_result == :stubbed
+          assert add_result == 1
+          assert mult_result == 2
           verify!()
       after
         1000 -> verify!()
@@ -585,8 +589,8 @@ defmodule MoxTest do
       task =
         Task.async(fn ->
           CalcMock
-          |> expect(:add, fn _, _ -> :expected end)
-          |> stub(:mult, fn _, _ -> :stubbed end)
+          |> expect(:add, fn _, _ -> 1 end)
+          |> stub(:mult, fn _, _ -> 2 end)
           |> allow(self(), parent_pid)
         end)
 
@@ -618,13 +622,13 @@ defmodule MoxTest do
       Process.register(child_pid, process_name)
 
       CalcMock
-      |> expect(:add, fn _, _ -> :expected end)
+      |> expect(:add, fn _, _ -> 1 end)
       |> allow(self(), process_name)
 
       send(:test_process, :call_mock)
 
       assert_receive {:verify, add_result}
-      assert add_result == :expected
+      assert add_result == 1
     end
 
     test "allowances support processes registered through a Registry" do
@@ -646,11 +650,11 @@ defmodule MoxTest do
       {:ok, _} = GenServer.start_link(CalculatorServer, [], name: name)
 
       CalcMock
-      |> expect(:add, fn _, _ -> :expected end)
+      |> expect(:add, fn _, _ -> 1 end)
       |> allow(self(), name)
 
       add_result = GenServer.call(name, :call_mock)
-      assert add_result == :expected
+      assert add_result == 1
     end
 
     test "raises if you try to allow itself" do
@@ -682,7 +686,7 @@ defmodule MoxTest do
       {:ok, pid} =
         Task.start_link(fn ->
           CalcMock
-          |> expect(:add, fn _, _ -> :expected end)
+          |> expect(:add, fn _, _ -> 1 end)
 
           send(parent_pid, :ready)
           Process.sleep(:infinity)
@@ -711,7 +715,7 @@ defmodule MoxTest do
 
       assert_raise ArgumentError, ~r"because the process has been allowed by", fn ->
         CalcMock
-        |> expect(:add, fn _, _ -> :expected end)
+        |> expect(:add, fn _, _ -> 1 end)
       end
     end
 

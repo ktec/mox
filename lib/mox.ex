@@ -221,6 +221,8 @@ defmodule Mox do
         :error -> raise ArgumentError, ":for option is required on defmock"
       end
 
+    Mox.Server.define_mock(name, behaviours)
+
     compile_header = generate_compile_time_dependency(behaviours)
     mock_funs = generate_mock_funs(behaviours)
     define_mock_module(name, behaviours, compile_header ++ mock_funs)
@@ -552,8 +554,27 @@ defmodule Mox do
                 "called #{times(count + 1)} in process #{inspect(self())}"
 
       {:ok, fun_to_call} ->
-        apply(fun_to_call, args)
+        res = apply(fun_to_call, args)
+        validate_response_type(mock, name, arity, res)
+        res
     end
+  end
+
+  defp validate_response_type(mock, name, arity, res) do
+    [behaviour | _] = Mox.Server.get_behaviours(mock)
+
+    with {:ok, specs} <- Code.Typespec.fetch_callbacks(behaviour),
+         {_, [{_, _, _, spec} | _]} <- Enum.find(specs, &match?({{^name, ^arity}, _}, &1)) do
+      response_type = Enum.reverse(spec) |> hd()
+      {_, _, type, _} = response_type
+      validate_type(type, res)
+    end
+  end
+
+  defp validate_type(:integer, res) when is_integer(res), do: :ok
+
+  defp validate_type(type, res) do
+    raise "#{inspect(res)} is not of type #{inspect(type)}"
   end
 
   defp times(1), do: "once"

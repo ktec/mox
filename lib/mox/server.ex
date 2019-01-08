@@ -10,6 +10,14 @@ defmodule Mox.Server do
     GenServer.start_link(__MODULE__, :ok, name: __MODULE__)
   end
 
+  def define_mock(name, behaviours) do
+    GenServer.call(__MODULE__, {:define_mock, name, behaviours}, @timeout)
+  end
+
+  def get_behaviours(name) do
+    GenServer.call(__MODULE__, {:get_behaviours, name}, @timeout)
+  end
+
   def add_expectation(owner_pid, key, value) do
     GenServer.call(__MODULE__, {:add_expectation, owner_pid, key, value}, @timeout)
   end
@@ -41,7 +49,24 @@ defmodule Mox.Server do
   # Callbacks
 
   def init(:ok) do
-    {:ok, %{expectations: %{}, allowances: %{}, deps: %{}, mode: :private, global_owner_pid: nil}}
+    {:ok,
+     %{
+       behaviours: %{},
+       expectations: %{},
+       allowances: %{},
+       deps: %{},
+       mode: :private,
+       global_owner_pid: nil
+     }}
+  end
+
+  def handle_call({:define_mock, name, behaviours}, _from, state) do
+    behaviours = Map.put(state.behaviours, name, behaviours)
+    {:reply, :ok, %{state | behaviours: behaviours}}
+  end
+
+  def handle_call({:get_behaviours, name}, _from, state) do
+    {:reply, Map.get(state.behaviours, name), state}
   end
 
   def handle_call(
