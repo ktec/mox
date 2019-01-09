@@ -567,14 +567,14 @@ defmodule Mox do
          {_, [{_, _, _, spec} | _]} <- Enum.find(specs, &match?({{^name, ^arity}, _}, &1)) do
       response_type = Enum.reverse(spec) |> hd()
       {_, _, type, _} = response_type
-      validate_type(type, res)
+
+      fun = String.to_atom("validate_#{name}")
+      has_validation_fun? = Kernel.function_exported?(behaviour, fun, 2)
+
+      if has_validation_fun? do
+        apply(behaviour, fun, [type, res])
+      end
     end
-  end
-
-  defp validate_type(:integer, res) when is_integer(res), do: :ok
-
-  defp validate_type(type, res) do
-    raise "#{inspect(res)} is not of type #{inspect(type)}"
   end
 
   defp times(1), do: "once"
